@@ -62,6 +62,10 @@ If the answer is not in the content, say you don't know and suggest contacting u
   }
 });
 
+app.get("/", (req, res) => {
+  res.send("✅ Backend deployed on Vercel and running!");
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log("Chat server running on port", PORT);
