@@ -1,32 +1,35 @@
 // server.js
-import "dotenv/config";   // or: import dotenv from "dotenv"; dotenv.config();
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { siteContent } from "./siteContent.js";
 
 const app = express();
-app.use(
-  cors({
-    origin: "*",
-  })
-);
+app.use(cors({ origin: "*" }));
 app.use(express.json());
-console.log((process.env.GEMINI_API_KEY))
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.post("/chat", async (req, res) => {
-    console.log(genAI)
-    console.log(req.body)
   try {
     const { message } = req.body;
     if (!message) {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    const lower = message.toLowerCase();
+    const lower = message.toLowerCase().trim();
 
-    // naive relevance: keep chunks that share words with the question
+    // Heuristic: "definition-style" or general knowledge question
+    const isGenericDefinition =
+      lower.startsWith("what is ") ||
+      lower.startsWith("who is ") ||
+      lower.startsWith("tell me about ") ||
+      lower === "hi" ||
+      lower === "hello" ||
+      lower === "hey";
+
+    // Naive relevance against siteContent
     const relevant = siteContent
       .filter((c) =>
         lower
@@ -35,21 +38,62 @@ app.post("/chat", async (req, res) => {
       )
       .slice(0, 5);
 
+    let hasContext = relevant.length > 0;
     const contextText = relevant.map((r) => r.text).join("\n\n");
 
-    const prompt = `
+    // If it's a generic knowledge question, FORCE free mode
+    if (isGenericDefinition) {
+      hasContext = false;
+    }
+
+    console.log("Has context:", hasContext);
+    if (hasContext) {
+      console.log("Using grounded mode. Relevant chunks:", relevant.length);
+    } else {
+      console.log("Using free mode (no relevant content or generic question).");
+    }
+
+    let prompt;
+
+    if (hasContext) {
+      // ===== GROUNDED MODE: answer only from website content =====
+      prompt = `
 You are the assistant for "The Logo Wall Street LLC" website.
 
-Here is content from the website:
-${contextText || "(no specific matching content found)."}
+Here is content from the website (including pricing packages):
+${contextText}
 
 User question: "${message}"
 
 Answer only based on the website content above.
-If the answer is not in the content, say you don't know and suggest contacting us via phone or email.
-`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+When answering, follow this format in Markdown:
+- If the user asks about all packages:
+  - Group by category (e.g., "Logo Design", "Web Solutions", etc.).
+  - Under each category, list each package as:
+    **Package Name** – **$CurrentPrice** (was $OldPrice)
+- If the user asks about a specific package (e.g. "Logo Elite Package", "Starter Web", etc.):
+  - Show:
+    **Package Name** – **$CurrentPrice** (was $OldPrice)
+    Then a bulleted list of features using "-".
+- Do not invent features or prices that are not in the content.
+`;
+    } else {
+      // ===== FREE MODE: general knowledge / greetings =====
+      prompt = `
+You are a helpful, knowledgeable assistant.
+
+The user is chatting from the website of "The Logo Wall Street LLC".
+
+User question: "${message}"
+
+Answer based on your general knowledge.
+You do NOT need to refer to the website content in this case.
+Give a clear, concise explanation.
+`;
+    }
+
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
     const result = await model.generateContent(prompt);
     const reply = result.response.text();
 
@@ -63,7 +107,7 @@ If the answer is not in the content, say you don't know and suggest contacting u
 });
 
 app.get("/", (req, res) => {
-  res.send("✅ Backend deployed on Vercel and running!");
+  res.send("✅ Backend deployed and running!");
 });
 
 const PORT = process.env.PORT || 4000;
