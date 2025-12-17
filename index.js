@@ -7,7 +7,11 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 
 const app = express();
 
-app.use(cors({ origin: "*" }));
+app.use(
+  cors({
+    origin: "*", // tighten in production
+  })
+);
 app.use(express.json());
 
 // Routes
