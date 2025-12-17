@@ -1,3 +1,4 @@
+// server.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -6,27 +7,7 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 
 const app = express();
 
-const allowedOrigins = [
-  "https://logo-wall-street.vercel.app",
-  "http://localhost:5173", // dev
-];
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // allow tools or same-origin with no origin header
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      console.warn("Blocked by CORS:", origin);
-      return callback(new Error("Not allowed by CORS"));
-    },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 // Routes
